@@ -1,20 +1,28 @@
 package com.example.tanzeem.flickrapp;
 
+import android.annotation.SuppressLint;
+import android.app.ProgressDialog;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.os.strictmode.WebViewMethodCalledOnWrongThreadViolation;
 import android.support.annotation.Nullable;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
+import android.util.Log;
+import android.view.Menu;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.ListView;
 
 import com.android.volley.Request;
 import com.android.volley.Response;
 import com.android.volley.VolleyError;
+import com.android.volley.VolleyLog;
+import com.android.volley.toolbox.JsonArrayRequest;
 import com.android.volley.toolbox.JsonObjectRequest;
 import com.android.volley.toolbox.Volley;
 import com.squareup.picasso.Picasso;
@@ -24,169 +32,133 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.List;
 
 import static java.lang.System.load;
 
 public class MainActivity extends AppCompatActivity {
 
-    List<PhotoGetterSetter> listPhoto;
-    private com.android.volley.RequestQueue mQueue;
-    EditText inputText;
-    Button button;
-    ImageView imageView1,imageView2,imageView3,imageView4,imageView5,imageView6,imageView7,imageView8,imageView9;
+    //API and SECRET Key
     private static final String API_KEY = "1dd900f9300147d4adf33fbc19cdd49e";
     private static final String SECRET_KEY = "6247e988ad3a7e1f";
+
+    //Log tag
+    private static final String TAG = MainActivity.class.getSimpleName();
+
+    private ProgressDialog progressDialog;
+    String url = "";
+
+    private List modelList = new ArrayList();
+    ListView listView;
+    private CustomAdapter adapter;
+    EditText inputtext;
+    Button button;
+
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        inputText = findViewById(R.id.inputtext);
+        //input text and button for performing the search operation.
+        inputtext = findViewById(R.id.inputtext);
         button = findViewById(R.id.button);
-        imageView1 = findViewById(R.id.image1);
-        imageView2 = findViewById(R.id.image2);
-        imageView3 = findViewById(R.id.image3);
-        imageView4 = findViewById(R.id.image4);
-        imageView5 = findViewById(R.id.image5);
-        imageView6 = findViewById(R.id.image6);
-        imageView7 = findViewById(R.id.image7);
-        imageView8 = findViewById(R.id.image8);
-        imageView9 = findViewById(R.id.image9);
 
+        listView = findViewById(R.id.listview);
+        adapter = new CustomAdapter(this,modelList);
+        listView.setAdapter(adapter);
 
-
-        mQueue = Volley.newRequestQueue(this);
+        progressDialog = new ProgressDialog(this);
 
         button.setOnClickListener(new View.OnClickListener() {
             @Override
-            public void onClick(View v) {
-                jsonParse(inputText);
+            public void onClick(View view) {
+                //Showing progress dialog box before making a request
+                progressDialog.setMessage("Loading.....");
+                progressDialog.show();
+
+                //Calling the json parsing method and calling with the input text
+                JsonParsing(inputtext);
             }
         });
-
-       /* RecyclerView recyclerView = findViewById(R.id.photo_recyclerview);
-        PhotoRecyclerView adapter = new PhotoRecyclerView(this,listPhoto);
-        recyclerView.setLayoutManager(new LinearLayoutManager(this,LinearLayoutManager.VERTICAL,false));
-        recyclerView.setAdapter(adapter);
-        */
-
     }
 
-    private void jsonParse(EditText tag) {
+    //Method for Json Parsing
+    public void JsonParsing(EditText inputtext){
 
-        String url ="https://api.flickr.com/services/rest/?method=flickr.photos.search&per_page=10&nojsoncallback=1&format=json&tags="+
-                tag+"&api_key="+API_KEY;
+        url = "https://api.flickr.com/services/rest/?method=flickr.photos.search&api_key="+API_KEY +
+                "&format=json&nojsoncallback=1&text=+"+inputtext+"&extras=url_o";
 
-        JsonObjectRequest request = new JsonObjectRequest(Request.Method.GET, url, null,
-                new Response.Listener<JSONObject>() {
+
+        //Creating volley request object
+        JsonArrayRequest photoReq = new JsonArrayRequest(url,
+                new Response.Listener<JSONArray>() {
                     @Override
-                    public void onResponse(JSONObject response) {
+                    public void onResponse(JSONArray response) {
+                        Log.d(TAG, response.toString());
+                        hidePDialog();
 
-                        try{
-                            JSONArray jsonArray = response.getJSONArray("photos");
-                            //JSONArray jsonArray1 = jsonArray[4];
+                        //Parsing Json
+                        for (int i = 0; i < response.length(); i++) {
+                            try {
+                                JSONObject photos = response.getJSONObject(i);
 
-                            for(int i = 0;i<jsonArray.length();i++){
+                                //Creating object of object
+                                JSONObject photo = photos.getJSONObject("photo");
 
-                                int count = 1;
-                                JSONObject photos = jsonArray.getJSONObject(i);
+                                int farm = photo.getInt("farm");
+                                int server = photo.getInt("server");
+                                int id = photo.getInt("id");
+                                String secret = photo.getString("secret");
 
-                                int farm = photos.getInt("farm");
-                                int server = photos.getInt("server");
-                                int id = photos.getInt("id");
-                                String secret = photos.getString("secret");
+                                //Creating the actual image url from the data feeded from above.
+                                String imageurl = "https://farm" + farm + ".staticflickr.com/" + server + "/" + id + "_" + secret + ".jpg";
+                                Model model = new Model();
+                                model.setThumbnailUrl(photo.getString(imageurl));
 
-                                String url = "http://farm" + farm + ".staticflickr.com/" +
-                                        server + "/" + id + "_" + secret + ".jpg";
-                                if(count == 1)
-                                    loadImageFromUrl1(url);
-                                else if(count == 2)
-                                    loadImageFromUrl2(url);
-                                else if(count == 3)
-                                    loadImageFromUrl3(url);
-                                else if(count == 4)
-                                    loadImageFromUrl4(url);
-                                else if(count == 5)
-                                    loadImageFromUrl5(url);
-                                else if(count == 6)
-                                    loadImageFromUrl6(url);
-                                else if(count == 7)
-                                    loadImageFromUrl7(url);
-                                else if(count == 8)
-                                    loadImageFromUrl8(url);
-                                else if(count == 9)
-                                    loadImageFromUrl9(url);
-
-                                count += 1;
-                                //listPhoto.add(new PhotoGetterSetter("http://farm" + farm + ".staticflickr.com/" +
-                                //        server + "/" + id + "_" + secret + ".jpg"));
+                            } catch (JSONException e) {
+                                e.printStackTrace();
                             }
-                        }catch (JSONException e){
-                            e.printStackTrace();
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                        }
 
+                        }
+                        // notifying list adapter about data changes so that it renders the list view with updated data
+                        adapter.notifyDataSetChanged();
                     }
+
                 }, new Response.ErrorListener() {
             @Override
             public void onErrorResponse(VolleyError error) {
-                error.printStackTrace();
+                VolleyLog.d(TAG,"Error: "+ error.getMessage());
+                hidePDialog();
             }
         });
 
-        mQueue.add(request);
+        //Adding request to request queue
+        AppController.getInstance().addToRequestQueue(photoReq);
     }
 
-    private void loadImageFromUrl1(String url) throws IOException {
-        URL urle = new URL(url);
-        Bitmap bmp = BitmapFactory.decodeStream(urle.openConnection().getInputStream());
-        imageView1.setImageBitmap(bmp);
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        hidePDialog();
     }
 
-    private void loadImageFromUrl2(String url)throws IOException {
-        URL urle = new URL(url);
-        Bitmap bmp = BitmapFactory.decodeStream(urle.openConnection().getInputStream());
-        imageView2.setImageBitmap(bmp);
-    }
-    private void loadImageFromUrl3(String url) throws IOException{
-        URL urle = new URL(url);
-        Bitmap bmp = BitmapFactory.decodeStream(urle.openConnection().getInputStream());
-        imageView3.setImageBitmap(bmp);
-    }
-    private void loadImageFromUrl4(String url) throws IOException{
-        URL urle = new URL(url);
-        Bitmap bmp = BitmapFactory.decodeStream(urle.openConnection().getInputStream());
-        imageView4.setImageBitmap(bmp);
-    }
-    private void loadImageFromUrl5(String url) throws IOException{
-        URL urle = new URL(url);
-        Bitmap bmp = BitmapFactory.decodeStream(urle.openConnection().getInputStream());
-        imageView5.setImageBitmap(bmp);
-    }
-    private void loadImageFromUrl6(String url)throws IOException {
-        URL urle = new URL(url);
-        Bitmap bmp = BitmapFactory.decodeStream(urle.openConnection().getInputStream());
-        imageView6.setImageBitmap(bmp);
-    }
-    private void loadImageFromUrl7(String url) throws IOException{
-        URL urle = new URL(url);
-        Bitmap bmp = BitmapFactory.decodeStream(urle.openConnection().getInputStream());
-        imageView7.setImageBitmap(bmp);
-    }
-    private void loadImageFromUrl8(String url)throws IOException {
-        URL urle = new URL(url);
-        Bitmap bmp = BitmapFactory.decodeStream(urle.openConnection().getInputStream());
-        imageView8.setImageBitmap(bmp);
-    }
-    private void loadImageFromUrl9(String url)throws IOException {
-        URL urle = new URL(url);
-        Bitmap bmp = BitmapFactory.decodeStream(urle.openConnection().getInputStream());
-        imageView9.setImageBitmap(bmp);
+    private void hidePDialog() {
+        if (progressDialog != null) {
+            progressDialog.dismiss();
+            progressDialog = null;
+        }
     }
 
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        // Inflate the menu; this adds items to the action bar if it is present.
+        getMenuInflater().inflate(R.menu.main, menu);
+        return true;
+    }
 }
